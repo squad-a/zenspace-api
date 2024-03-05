@@ -2,7 +2,7 @@ import strawberry
 from pypika import Query as PypikaQuery
 from models import engine
 from schema import Note
-from typing import List
+from typing import Any, List
 from sqlalchemy import text
 
 

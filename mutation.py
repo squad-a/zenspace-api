@@ -7,28 +7,34 @@ from utils import generated_avatar_url, is_user_exists
 from pypika import Table, Query as PypikaQuery
 from sqlalchemy import text
 import secrets
-from schema import LoginSuccess, LoginError
-from typing import Annotated, Union
+from schema import SuccessResponse, ErrorResponse
+from typing import Annotated, Union, List
 
 # Todo: Adding Avatar URL
 
 
 LoginResponse = Annotated[
-    Union[LoginSuccess, LoginError], strawberry.union("LoginResponse")
+    Union[SuccessResponse[UserSchema], ErrorResponse], strawberry.union("LoginResponse")
+]
+
+RegisterResponse = Annotated[
+    Union[SuccessResponse[str], ErrorResponse],
+    strawberry.union("RegisterResponse"),
 ]
 
 
 @strawberry.type
 class Mutation:
+
     @strawberry.mutation
-    def signup(self, email: str) -> str:
+    def create_user(self, email: str) -> RegisterResponse:
         avatar_url = generated_avatar_url()
 
         session = Session()
         user_exist = is_user_exists(email)
 
         if user_exist:
-            return "User Already Exists"
+            return ErrorResponse(message="User Already Exists")
 
         else:
             user = User(
@@ -42,48 +48,70 @@ class Mutation:
             session.commit()
             session.close()
 
-            return "User Registered Successfully"
+            return SuccessResponse(
+                data="",
+                message="User Created Successfully",
+            )
 
-
-
-
-    # * API is Underconstruction
 
     @strawberry.mutation
-    # def login(self, email: str) -> LoginResponse:
-    #     """
-    #     This function is used to authenticate the user.
-    #     :param email: str
-    #     :return: str
-    #     """
+    def login_user(self, email: str) -> LoginResponse:
+        """
+        This function is used to authenticate the user.
+        :param email: str
+        :return: str
+        """
 
-    #     user_exist = is_user_exists(email)
-    #     if user_exist:
-    #         session_id = str(secrets.token_hex(16))
-    #         try:
-    #             user = Table("m_user")
-    #             with engine.connect() as conn:
-    #                 q = (
-    #                     PypikaQuery.update(user)
-    #                     .set(user.session_id, session_id)
-    #                     .where(user.email == email)
-    #                 )
-    #                 print(q)
-    #                 result = conn.execute(text(str(q)))
-    #                 conn.commit()
-    #                 conn.close()
+        user_exist = is_user_exists(email)
+        
+        if user_exist:
+            session_id = str(secrets.token_hex(16))
+            try:
+                user = Table("m_user")
+                with engine.connect() as conn:
+                    q = (
+                        PypikaQuery.update(user)
+                        .set(user.session_id, session_id)
+                        .where(user.email == email)
+                    )
 
-    #             with engine.connect() as conn:
-    #                 q = user.select("*").where(user.email == email)
-    #                 result = conn.execute(text(str(q)))
-    #                 user_data = result.mappings().all()
+                    result = conn.execute(text(str(q)))
+                    conn.commit()
+                    conn.close()
 
-    #             return LoginSuccess(data=User(**user_data))
+                with engine.connect() as conn:
+                    q = user.select("*").where(user.email == email)
+                    result = conn.execute(text(str(q)))
+                    user_data = result.mappings().all()
+                    print("user_data", user_data)
+                    print(
+                        "user_data",
+                        UserSchema(
+                            user_id=user_data[0]["user_id"],
+                            email=user_data[0]["email"],
+                            avatar=user_data[0]["user_id"],
+                            created_at=user_data[0]["created_at"],
+                            session_id=session_id,
+                            is_active=user_data[0]["is_active"],
+                        ),
+                    )
+                    return SuccessResponse(
+                        data=UserSchema(
+                            user_id=user_data[0]["user_id"],
+                            email=user_data[0]["email"],
+                            avatar=user_data[0]["user_id"],
+                            created_at=user_data[0]["created_at"],
+                            session_id=session_id,
+                            is_active=user_data[0]["is_active"],
+                        ),
+                        message="Login Successful",
+                    )
 
-    #         except Exception as e:
-    #             return LoginError(message="Login Failed")
-    #     else:
-    #         return LoginError(message="User Not Found")
+            except Exception as e:
+                print(e)
+                return ErrorResponse(message="Login Failed")
+        else:
+            return ErrorResponse(message="User Not Found")
 
     @strawberry.mutation
     def add_notes(self, note: str) -> str:
